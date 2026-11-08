@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<title>WeChat Replay 2025</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;900&display=swap');
+
+*{
+    box-sizing:border-box;
+}
+
+html,
+body{
+    margin:0;
+    padding:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:black;
+    font-family:'Inter',sans-serif;
+}
+
+#root{
+    width:100%;
+    height:100%;
+}
+
+.app-container{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    overflow:hidden;
+    background:black;
+}
+
+.page{
+    position:absolute;
+    inset:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+}
+
+.apple-card{
+
+    width:88vw;
+    max-width:460px;
+
+    padding:48px 32px;
+
+    border-radius:40px;
+
+    background:rgba(255,255,255,0.08);
+
+    backdrop-filter:blur(30px);
+    -webkit-backdrop-filter:blur(30px);
+
+    border:1px solid rgba(255,255,255,0.12);
+
+    box-shadow:
+        0 10px 40px rgba(0,0,0,0.35),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+
+    text-align:center;
+
+    position:relative;
+    z-index:5;
+}
+
+.apple-title{
+
+    font-size:12px;
+    letter-spacing:0.4em;
+
+    text-transform:uppercase;
+
+    opacity:0.55;
+
+    margin-bottom:28px;
+
+    font-weight:700;
+
+    color:white;
+}
+
+.apple-number{
+
+    font-size:clamp(58px,14vw,110px);
+
+    line-height:0.9;
+
+    font-weight:900;
+
+    letter-spacing:-0.06em;
+
+    margin-bottom:28px;
+
+    background:linear-gradient(to bottom,#fff,rgba(255,255,255,0.7));
+
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+
+    word-break:break-word;
+}
+
+.apple-unit{
+
+    font-size:26px;
+    opacity:0.55;
+    margin-left:6px;
+}
+
+.apple-sub{
+
+    font-size:17px;
+
+    line-height:1.8;
+
+    opacity:0.82;
+
+    white-space:pre-line;
+
+    font-weight:300;
+
+    color:white;
+}
+
+.chart-wrap{
+    width:100%;
+    height:300px;
+    margin-top:20px;
+}
+
+.chart-wrap canvas{
+    width:100% !important;
+    height:100% !important;
+}
+
+.wordcloud-image{
+
+    width:100%;
+    margin-top:24px;
+
+    border-radius:24px;
+
+    object-fit:cover;
+
+    box-shadow:
+        0 10px 30px rgba(0,0,0,0.35);
+}
+
+.liquid{
+
+    position:absolute;
+
+    border-radius:9999px;
+
+    filter:blur(120px);
+
+    animation:float 18s ease-in-out infinite alternate;
+}
+
+@keyframes float{
+
+    from{
+        transform:
+            translate(-30px,-20px)
+            scale(1);
+    }
+
+    to{
+        transform:
+            translate(30px,40px)
+            scale(1.2);
+    }
+}
+
+.arrow{
+
+    position:absolute;
+
+    bottom:40px;
+
+    left:50%;
+
+    transform:translateX(-50%);
+
+    color:rgba(255,255,255,0.4);
+
+    font-size:28px;
+
+    animation:bounce 2s infinite;
+}
+
+@keyframes bounce{
+
+    0%,100%{
+        transform:translateX(-50%) translateY(0);
+    }
+
+    50%{
+        transform:translateX(-50%) translateY(10px);
+    }
+}
+
+.page-indicator{
+
+    position:fixed;
+
+    right:18px;
+
+    top:50%;
+
+    transform:translateY(-50%);
+
+    z-index:100;
+}
+
+.dot{
+
+    width:8px;
+    height:8px;
+
+    border-radius:999px;
+
+    background:rgba(255,255,255,0.25);
+
+    margin:12px 0;
+
+    transition:0.4s;
+}
+
+.dot.active{
+    height:28px;
+    background:white;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+
+const { useEffect, useRef, useState } = React;
+const { motion, AnimatePresence } = window.Motion;
+
+function MusicVisualizer({ analyser }) {
+
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+
+        if (!analyser) return;
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        let animationId;
+
+        const render = () => {
+
+            animationId = requestAnimationFrame(render);
+
+            analyser.getByteFrequencyData(dataArray);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = canvas.width / 64;
+
+            for (let i = 0; i < 64; i++) {
+
+                const value = dataArray[i];
+
+                const height = value * 0.7;
+
+                const x = i * barWidth;
+
+                const y = canvas.height - height;
+
+                const gradient = ctx.createLinearGradient(
+                    0,
+                    y,
+                    0,
+                    canvas.height
+                );
+
+                gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
+                gradient.addColorStop(1, 'rgba(255,255,255,0.1)');
+
+                ctx.fillStyle = gradient;
+
+                ctx.fillRect(
+                    x,
+                    y,
+                    barWidth * 0.6,
+                    height
+                );
+            }
+        };
+
+        render();
+
+        return () => cancelAnimationFrame(animationId);
+
+    }, [analyser]);
+
+    return (
+        <canvas
+            ref={canvasRef}
+            width={600}
+            height={120}
+            style={{
+                width:'100%',
+                height:'90px',
+                marginTop:'24px',
+                opacity:0.9
+            }}
+        />
+    );
+}
+
+function ChartCard({ type, labels, values }) {
+
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+
+        if (!canvasRef.current) return;
+
+        const ctx = canvasRef.current.getContext('2d');
+
+        const chart = new Chart(ctx, {
+
+            type,
+
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    borderColor: 'rgba(255,255,255,0.95)',
+                    backgroundColor: 'rgba(255,255,255,0.18)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.45,
+                    pointRadius: 0,
+                    barThickness: 10
+                }]
+            },
+
+            options: {
+
+                responsive:true,
+
+                maintainAspectRatio:false,
+
+                plugins:{
+                    legend:{
+                        display:false
+                    }
+                },
+
+                scales:{
+
+                    x:{
+                        ticks:{
+                            color:'rgba(255,255,255,0.65)',
+                            maxTicksLimit:6
+                        },
+                        grid:{
+                            display:false
+                        }
+                    },
+
+                    y:{
+                        ticks:{
+                            color:'rgba(255,255,255,0.5)'
+                        },
+                        grid:{
+                            color:'rgba(255,255,255,0.06)'
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => chart.destroy();
+
+    }, []);
+
+    return (
+        <div className="chart-wrap">
+            <canvas ref={canvasRef}></canvas>
+        </div>
+    );
+}
+
+function App() {
+
+    const [currentPage, setCurrentPage] = useState(0);
+
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    const [analyser, setAnalyser] = useState(null);
+
+    const audioRef = useRef(null);
+
+    const [isAnimating, setIsAnimating] = useState(false);
+
+    useEffect(() => {
+
+        const audio = new Audio('./music.mp3');
+
+        audio.loop = true;
+
+        audio.volume = 0.7;
+
+        audioRef.current = audio;
+
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        const ctx = new AudioContext();
+
+        const src = ctx.createMediaElementSource(audio);
+
+        const analyserNode = ctx.createAnalyser();
+
+        analyserNode.fftSize = 128;
+
+        src.connect(analyserNode);
+
+        analyserNode.connect(ctx.destination);
+
+        setAnalyser(analyserNode);
+
+        const startAudio = async () => {
+
+            try {
+
+                await ctx.resume();
+
+                await audio.play();
+
+                setIsPlaying(true);
+
+                window.removeEventListener('click', startAudio);
+                window.removeEventListener('touchstart', startAudio);
+
+            } catch (err) {
+
+                console.log('播放失败:', err);
+            }
+        };
+
+        window.addEventListener('click', startAudio);
+
+        window.addEventListener('touchstart', startAudio);
+
+        return () => {
+
+            audio.pause();
+
+            audio.src = '';
+
+            ctx.close();
+
+            window.removeEventListener('click', startAudio);
+
+            window.removeEventListener('touchstart', startAudio);
+        };
+
+    }, []);
+
+    const data = {
+
+        total_messages: 318112,
+
+        total_days: 603,
+
+        latest_chat: {
+            time: "06:54:30",
+            date: "2026-05-11",
+            topic: "拍了拍"
+        },
+
+        initiator: {
+            TA: 313,
+            我: 255
+        },
+
+        reply_speed: {
+            TA: 139.09,
+            我: 105.70
+        },
+
+        monthly: {
+            labels: [
+                "2024-09","2024-10","2024-11","2024-12",
+                "2025-01","2025-02","2025-03","2025-04",
+                "2025-05","2025-06","2025-07","2025-08",
+                "2025-09","2025-10","2025-11","2025-12",
+                "2026-01","2026-02","2026-03","2026-04",
+                "2026-05"
+            ],
+
+            values: [
+                1457,16382,8831,9806,12947,19062,
+                19971,22961,20640,23406,12189,15544,
+                17377,14858,15061,14327,12386,
+                18084,20987,17129,4707
+            ]
+        },
+
+        sentiment_trend: [
+            0.90,0.37,0.50,0.55,0.50,0.49,
+            0.51,0.51,0.53,0.52,0.58,0.52,
+            0.48,0.51,0.53,0.44,0.57,0.51,
+            0.43,0.53,0.52,0.57
+        ],
+
+        top_30: [
+            "宝宝","拍了拍","哈哈哈","喜欢","明天"
+        ],
+
+        hourly_dist: [
+            4785,9189,13890,19673,20749,18070,
+            14082,16621,15379,20737,21068,16337,
+            17574,18208,21165,29324,29621,7145,
+            1763,633,149,85,268,1597
+        ],
+
+        longest_silence: 116.3,
+
+        baby_count:{
+            me:7988,
+            ta:8685
+        },
+
+        all_nighter_count:569
+    };
+
+    const pages = [
+
+        {
+            id:1,
+            label:'2025',
+            val:'REPLAY',
+            sub:'这一年，属于我们的连接报告',
+            color:'from-purple-600 to-pink-500'
+        },
+
+        {
+            id:2,
+            label:'共同走过',
+            val:data.total_days,
+            unit:'天',
+            sub:'每一天，对话框里都有你的身影',
+            color:'from-blue-600 to-indigo-700'
+        },
+
+        {
+            id:3,
+            label:'聊天总量',
+            val:data.total_messages.toLocaleString(),
+            unit:'条',
+            sub:'所有的废话，都是爱你的证据',
+            color:'from-orange-500 to-red-600'
+        },
+
+        {
+            id:4,
+            label:'谁更主动',
+            val:data.initiator.TA > data.initiator.我 ? 'TA' : '你',
+            sub:`TA 开启了 ${data.initiator.TA} 次话题
+你开启了 ${data.initiator.我} 次`,
+            color:'from-green-500 to-teal-600'
+        },
+
+        {
+            id:5,
+            label:'回复速度 PK',
+            val:Math.round(data.reply_speed.我),
+            unit:'s',
+            sub:`你的平均回复时间：${Math.round(data.reply_speed.我)} 秒
+TA 的平均回复时间：${Math.round(data.reply_speed.TA)} 秒`,
+            color:'from-pink-500 to-rose-500'
+        },
+
+        {
+            id:6,
+            label:'那一晚',
+            val:data.latest_chat.time,
+            sub:`${data.latest_chat.date}
+我们在凌晨聊着：${data.latest_chat.topic}`,
+            color:'from-gray-800 to-black'
+        },
+
+        {
+            id:7,
+            label:'聊天月度趋势',
+            chartType:'line',
+            chartLabels:data.monthly.labels,
+            chartData:data.monthly.values,
+            sub:'记录爱意的每一次生长',
+            color:'from-indigo-500 to-purple-600'
+        },
+
+        {
+            id:8,
+            label:'24h 活跃分布',
+            chartType:'bar',
+            chartLabels:Array.from({length:24},(_,i)=>i+'时'),
+            chartData:data.hourly_dist,
+            sub:'深夜，是我们最密集的时刻',
+            color:'from-yellow-600 to-orange-500'
+        },
+
+        {
+            id:9,
+            label:'情绪波动分析',
+            chartType:'line',
+            chartLabels:data.sentiment_trend.map((_,i)=>'W'+(i+1)),
+            chartData:data.sentiment_trend,
+            sub:'我们的对话里，充满了正能量',
+            color:'from-emerald-500 to-green-600'
+        },
+
+        {
+            id:10,
+            label:'高频词汇',
+            val:'Top 30',
+            sub:data.top_30.join(' · '),
+            color:'from-cyan-500 to-blue-500'
+        },
+
+        {
+            id:11,
+            label:'爱的称呼',
+            val:data.baby_count.me + data.baby_count.ta,
+            unit:'次',
+            sub:`你发了 ${data.baby_count.me} 次“宝宝”
+TA 发了 ${data.baby_count.ta} 次`,
+            color:'from-rose-500 to-pink-500'
+        },
+
+        {
+            id:12,
+            label:'时间分析',
+            val:'22:00',
+            sub:'晚上 22:00 - 01:00\n是我们聊得最投机的时间段',
+            color:'from-amber-500 to-orange-600'
+        },
+
+        {
+            id:13,
+            label:'最长连续聊天',
+            val:'8.2',
+            unit:'h',
+            sub:'那个周末，我们仿佛有聊不完的话题',
+            color:'from-blue-400 to-indigo-500'
+        },
+
+        {
+            id:14,
+            label:'最长沉默时刻',
+            val:data.longest_silence,
+            unit:'h',
+            sub:'想你的那几十个小时，好漫长',
+            color:'from-slate-600 to-slate-900'
+        },
+
+        {
+            id:15,
+            label:'熬夜频率',
+            val:data.all_nighter_count,
+            unit:'次',
+            sub:'不舍得说晚安的夜晚\n一共出现了这么多次',
+            color:'from-indigo-900 to-black'
+        },
+
+        {
+            id:16,
+            label:'这一年的语言',
+            isImage:true,
+            img:'./year_wordcloud.png',
+            sub:'这些词汇，拼凑出了我们的 2025',
+            color:'from-teal-500 to-emerald-600'
+        },
+
+        {
+            id:17,
+            label:'致 2026',
+            val:'KEEP TALKING',
+            sub:'故事未完待续\n爱你，不止在聊天记录里',
+            color:'from-red-600 to-pink-600'
+        }
+    ];
+
+    useEffect(() => {
+
+        const handleWheel = (e) => {
+
+            if (isAnimating) return;
+
+            setIsAnimating(true);
+
+            if (e.deltaY > 0){
+
+                setCurrentPage(prev =>
+                    Math.min(prev + 1, pages.length - 1)
+                );
+
+            }else{
+
+                setCurrentPage(prev =>
+                    Math.max(prev - 1, 0)
+                );
+            }
+
+            setTimeout(()=>{
+                setIsAnimating(false);
+            },1000);
+        };
+
+        let touchStartY = 0;
+
+        const handleTouchStart = (e)=>{
+            touchStartY = e.touches[0].clientY;
+        };
+
+        const handleTouchEnd = (e)=>{
+
+            const endY = e.changedTouches[0].clientY;
+
+            const delta = touchStartY - endY;
+
+            if(Math.abs(delta) < 50) return;
+
+            if(isAnimating) return;
+
+            setIsAnimating(true);
+
+            if(delta > 0){
+
+                setCurrentPage(prev =>
+                    Math.min(prev + 1, pages.length - 1)
+                );
+
+            }else{
+
+                setCurrentPage(prev =>
+                    Math.max(prev - 1, 0)
+                );
+            }
+
+            setTimeout(()=>{
+                setIsAnimating(false);
+            },1400);
+        };
+
+        window.addEventListener('wheel',handleWheel,{ passive:true });
+
+        window.addEventListener('touchstart',handleTouchStart);
+
+        window.addEventListener('touchend',handleTouchEnd);
+
+        return ()=>{
+
+            window.removeEventListener('wheel',handleWheel);
+
+            window.removeEventListener('touchstart',handleTouchStart);
+
+            window.removeEventListener('touchend',handleTouchEnd);
+        };
+
+    }, [isAnimating]);
+
+    const p = pages[currentPage];
+
+    return(
+
+        <div className="app-container">
+
+            <div className="page-indicator">
+
+                {pages.map((_,i)=>(
+
+                    <div
+                        key={i}
+                        className={`dot ${i===currentPage ? 'active' : ''}`}
+                    />
+
+                ))}
+
+            </div>
+
+            <AnimatePresence mode="wait">
+
+                <motion.section
+
+                    key={p.id}
+
+                    className="page"
+
+                    initial={{
+                        opacity:0,
+                        scale:1.08,
+                        filter:'blur(40px)'
+                    }}
+
+                    animate={{
+                        opacity:1,
+                        scale:1,
+                        filter:'blur(0px)'
+                    }}
+
+                    exit={{
+                        opacity:0,
+                        scale:0.92,
+                        filter:'blur(20px)'
+                    }}
+
+                    transition={{
+                        duration:1.3,
+                        ease:[0.16,1,0.3,1]
+                    }}
+                >
+
+                    <div className="absolute inset-0 overflow-hidden">
+
+                        <div
+                            className={`absolute inset-0 bg-gradient-to-br ${p.color} opacity-70`}
+                        />
+
+                        <div
+                            className="liquid w-[500px] h-[500px] bg-white/10 top-[-10%] left-[-10%]"
+                        />
+
+                        <div
+                            className="liquid w-[600px] h-[600px] bg-black/30 bottom-[-20%] right-[-10%]"
+                            style={{animationDelay:'-5s'}}
+                        />
+
+                    </div>
+
+                    <motion.div
+
+                        className="apple-card"
+
+                        initial={{
+                            opacity:0,
+                            y:80,
+                            scale:0.95
+                        }}
+
+                        animate={{
+                            opacity:1,
+                            y:0,
+                            scale:1
+                        }}
+
+                        transition={{
+                            duration:1.5,
+                            delay:0.15,
+                            ease:[0.16,1,0.3,1]
+                        }}
+                    >
+
+                        <p className="apple-title">
+                            {p.label}
+                        </p>
+
+                        {!p.chartType && !p.isImage && (
+
+                            <>
+                                <h1 className="apple-number">
+
+                                    {p.val}
+
+                                    {p.unit && (
+                                        <span className="apple-unit">
+                                            {p.unit}
+                                        </span>
+                                    )}
+
+                                </h1>
+
+                                <p className="apple-sub">
+                                    {p.sub}
+                                </p>
+
+                                <MusicVisualizer analyser={analyser} />
+                            </>
+                        )}
+
+                        {p.chartType && (
+
+                            <>
+                                <p className="apple-sub">
+                                    {p.sub}
+                                </p>
+
+                                <ChartCard
+                                    type={p.chartType}
+                                    labels={p.chartLabels}
+                                    values={p.chartData}
+                                />
+                            </>
+                        )}
+
+                        {p.isImage && (
+
+                            <>
+                                <img
+                                    src={p.img}
+                                    className="wordcloud-image"
+                                />
+
+                                <p className="apple-sub mt-6">
+                                    {p.sub}
+                                </p>
+                            </>
+                        )}
+
+                    </motion.div>
+
+                    <div className="arrow">
+                        ↓
+                    </div>
+
+                </motion.section>
+
+            </AnimatePresence>
+
+            <button
+
+                onClick={async () => {
+
+                    if (!audioRef.current) return;
+
+                    if (isPlaying) {
+
+                        audioRef.current.pause();
+
+                        setIsPlaying(false);
+
+                    } else {
+
+                        try {
+
+                            await audioRef.current.play();
+
+                            setIsPlaying(true);
+
+                        } catch (err) {
+
+                            console.log(err);
+                        }
+                    }
+                }}
+
+                style={{
+
+                    position:'fixed',
+
+                    right:'24px',
+
+                    bottom:'24px',
+
+                    width:'58px',
+
+                    height:'58px',
+
+                    borderRadius:'999px',
+
+                    border:'1px solid rgba(255,255,255,0.15)',
+
+                    background:'rgba(255,255,255,0.08)',
+
+                    backdropFilter:'blur(20px)',
+
+                    color:'white',
+
+                    fontSize:'22px',
+
+                    zIndex:999,
+
+                    cursor:'pointer',
+
+                    boxShadow:'0 10px 30px rgba(0,0,0,0.35)'
+                }}
+
+            >
+
+                {isPlaying ? '❚❚' : '▶'}
+
+            </button>
+
+        </div>
+    );
+}
+
+const root = ReactDOM.createRoot(
+    document.getElementById('root')
+);
+
+root.render(<App />);
+
+</script>
+
+</body>
+</html>
